@@ -8,10 +8,10 @@ The flow is:
 Source app / Safari / Scripting
   -> relay://run?input=...&x-success=...
   -> Relay Proxy opens and stores the payload instantly
+  -> Relay Proxy immediately opens x-success and returns to the source app
   -> Personal Automation: When Relay Proxy is opened -> Run Shortcut
   -> Shortcut reads the payload using the app's App Intent
   -> Shortcut does its work
-  -> Shortcut opens the x-success callback URL
 ```
 
 ## What is included
@@ -19,10 +19,12 @@ Source app / Safari / Scripting
 - Custom URL schemes: `relay://` and `relayproxy://`
 - Deep-link parser for `input`, `text`, `q`, `payload`, `payload_json`, and `payload_b64`
 - Callback parser for `x-success`, `x_success`, `callback`, `return`, `return_url`
+- Automatic callback return from inside the app
+- Optional callback delay using `returnDelayMs`, `return_delay_ms`, `callbackDelayMs`, `callback_delay_ms`, or `delay_ms`
 - App Intent: **Get Latest Relay Payload**
 - App Intent: **Clear Relay Payloads**
 - Local payload history, limited to 50 items
-- GitHub Actions workflow for unsigned simulator build
+- GitHub Actions workflow for building an unsigned IPA and uploading build logs
 
 ## Example URLs
 
@@ -36,6 +38,12 @@ Input with callback:
 
 ```text
 relay://run?input=Hello&x-success=sourceapp%3A%2F%2Fcallback
+```
+
+Input with callback and faster/slower return delay:
+
+```text
+relay://run?input=Hello&x-success=sourceapp%3A%2F%2Fcallback&returnDelayMs=250
 ```
 
 Hebrew example:
@@ -72,7 +80,8 @@ Important: `x-success` must be percent-encoded if it contains `:`, `/`, `?`, `&`
    - Wait Milliseconds: `1200`
 7. Parse the returned JSON in Shortcuts.
 8. Do your automation work.
-9. At the end, open `payload.callbackURL` if it exists.
+
+The Shortcut does **not** need to open `payload.callbackURL`. Relay Proxy now handles the callback return itself.
 
 Returned JSON shape:
 
@@ -110,6 +119,20 @@ If no fresh payload is found:
 ## Why the wait parameter exists
 
 The app-open automation can sometimes begin almost at the same time as the app receives the deep link. The App Intent polls briefly so it can catch the new payload instead of accidentally reading too early.
+
+## Callback delay
+
+Relay Proxy returns to `x-success` automatically after saving the payload. The default delay is 250 ms.
+
+You can override it with one of these parameters:
+
+```text
+returnDelayMs=0
+returnDelayMs=250
+returnDelayMs=1000
+```
+
+The accepted range is 0-5000 ms.
 
 ## Bundle ID
 
@@ -156,22 +179,17 @@ A workflow is included at:
 .github/workflows/ios-build.yml
 ```
 
-It performs an unsigned simulator build:
+It builds an unsigned device app, packages it as an IPA, and uploads build logs:
 
-```bash
-xcodebuild \
-  -project RelayProxy.xcodeproj \
-  -scheme RelayProxy \
-  -configuration Debug \
-  -sdk iphonesimulator \
-  CODE_SIGNING_ALLOWED=NO \
-  build
+```text
+RelayProxy-unsigned-ipa
+RelayProxy-build-logs
 ```
 
-For a real `.ipa`, you will need signing credentials or manual build/export from Xcode/Xcode Cloud.
+For a real installable `.ipa`, you may need signing credentials or manual build/export from Xcode/Xcode Cloud.
 
 ## Limitations
 
 - This does not run Apple Shortcuts silently from inside Swift. It uses a Shortcuts personal automation triggered by opening the app.
 - iPadOS still has control over focus, Stage Manager and app switching behavior.
-- The callback return is best done inside the Shortcut with the built-in **Open URLs** action.
+- Relay Proxy handles the callback return, not the Shortcut.
