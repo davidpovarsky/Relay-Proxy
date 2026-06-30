@@ -7,9 +7,10 @@ final class RelayViewModel: ObservableObject {
     @Published var statusText: String
 
     init() {
-        self.latestPayload = PayloadStore.latest()
-        if let latestPayload {
-            self.statusText = "Ready. Last payload: \(latestPayload.id)"
+        let storedPayload = PayloadStore.latest()
+        self.latestPayload = storedPayload
+        if let storedPayload {
+            self.statusText = "Ready. Last payload: \(storedPayload.id)"
         } else {
             self.statusText = "Ready. No payload yet."
         }
