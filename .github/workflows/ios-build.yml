@@ -13,12 +13,27 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Prepare diagnostics
+        run: |
+          set -euo pipefail
+          mkdir -p logs build
+          echo "Repository files:" | tee logs/repo-files.log
+          find . -maxdepth 4 -type f | sort | tee -a logs/repo-files.log
+
       - name: Show Xcode version
-        run: xcodebuild -version
+        run: |
+          set -euo pipefail
+          xcodebuild -version 2>&1 | tee logs/xcode-version.log
+
+      - name: Show project schemes
+        run: |
+          set -euo pipefail
+          xcodebuild -list -project RelayProxy.xcodeproj 2>&1 | tee logs/xcodebuild-list.log
 
       - name: Build unsigned device app
         run: |
           set -euo pipefail
+          rm -rf build/DerivedData build/RelayProxy.xcresult
 
           xcodebuild \
             -project RelayProxy.xcodeproj \
@@ -27,27 +42,34 @@ jobs:
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
             -derivedDataPath build/DerivedData \
+            -resultBundlePath build/RelayProxy.xcresult \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            clean build
+            clean build 2>&1 | tee logs/xcodebuild.log
 
       - name: Package unsigned IPA
         run: |
           set -euo pipefail
 
-          APP_PATH="$(find build/DerivedData/Build/Products/Release-iphoneos -maxdepth 1 -name '*.app' -type d | head -n 1)"
+          {
+            echo "Searching for built app bundle..."
+            find build/DerivedData/Build/Products -maxdepth 3 -type d -name '*.app' -print || true
 
-          if [ -z "$APP_PATH" ]; then
-            echo "No .app bundle found."
-            exit 1
-          fi
+            APP_PATH="$(find build/DerivedData/Build/Products/Release-iphoneos -maxdepth 1 -name '*.app' -type d | head -n 1)"
 
-          echo "Packaging app: $APP_PATH"
-          rm -rf Payload RelayProxy-unsigned.ipa
-          mkdir -p Payload
-          cp -R "$APP_PATH" Payload/
-          /usr/bin/zip -qry RelayProxy-unsigned.ipa Payload
+            if [ -z "$APP_PATH" ]; then
+              echo "No .app bundle found."
+              exit 1
+            fi
+
+            echo "Packaging app: $APP_PATH"
+            rm -rf Payload RelayProxy-unsigned.ipa
+            mkdir -p Payload
+            cp -R "$APP_PATH" Payload/
+            /usr/bin/zip -qry RelayProxy-unsigned.ipa Payload
+            ls -lh RelayProxy-unsigned.ipa
+          } 2>&1 | tee logs/package-ipa.log
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
@@ -55,3 +77,13 @@ jobs:
           name: RelayProxy-unsigned-ipa
           path: RelayProxy-unsigned.ipa
           if-no-files-found: error
+
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: RelayProxy-build-logs
+          path: |
+            logs
+            build/RelayProxy.xcresult
+          if-no-files-found: warn
