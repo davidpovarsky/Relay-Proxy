@@ -6,6 +6,13 @@ struct RelayPayload: Codable, Identifiable, Equatable {
     var callbackURL: String?
     var action: String?
     var source: String?
+    var sourceBundleID: String?
+    var sourceAppName: String?
+    var shortcutName: String?
+    var shortcutIcon: String?
+    var shortcutEmoji: String?
+    var shortcutColor: String?
+    var callbackMode: String?
     var rawURL: String
     var parameters: [String: String]
     var timestamp: Date
@@ -13,6 +20,25 @@ struct RelayPayload: Codable, Identifiable, Equatable {
 
     var isConsumed: Bool {
         consumedAt != nil
+    }
+
+    var displayShortcutName: String {
+        shortcutName?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ? shortcutName! : "Automation"
+    }
+
+    var displaySourceName: String {
+        if let sourceAppName, !sourceAppName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return sourceAppName
+        }
+        if let source, !source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return source
+        }
+        return sourceBundleID ?? "Unknown"
+    }
+
+    var displaySymbolName: String {
+        let candidate = shortcutIcon?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return candidate?.isEmpty == false ? candidate! : "bolt.circle.fill"
     }
 }
 
