@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import UIKit
 
 @MainActor
 final class RelayViewModel: ObservableObject {
@@ -20,7 +21,15 @@ final class RelayViewModel: ObservableObject {
         let payload = RelayURLHandler.payload(from: url)
         PayloadStore.save(payload)
         latestPayload = payload
-        statusText = "Saved payload: \(payload.id)"
+
+        if let callbackURLString = payload.callbackURL,
+           let callbackURL = URL(string: callbackURLString) {
+            let delayMilliseconds = callbackDelayMilliseconds(from: payload.parameters)
+            statusText = "Saved payload: \(payload.id). Returning in \(delayMilliseconds) ms."
+            openCallback(callbackURL, afterMilliseconds: delayMilliseconds)
+        } else {
+            statusText = "Saved payload: \(payload.id)"
+        }
     }
 
     func refresh() {
@@ -31,5 +40,32 @@ final class RelayViewModel: ObservableObject {
         PayloadStore.clear()
         latestPayload = nil
         statusText = "Cleared payload history."
+    }
+
+    private func callbackDelayMilliseconds(from parameters: [String: String]) -> Int {
+        let keys = ["returnDelayMs", "return_delay_ms", "callbackDelayMs", "callback_delay_ms", "delay_ms"]
+        for key in keys {
+            if let value = parameters[key], let milliseconds = Int(value) {
+                return min(max(milliseconds, 0), 5000)
+            }
+        }
+        return 250
+    }
+
+    private func openCallback(_ callbackURL: URL, afterMilliseconds delayMilliseconds: Int) {
+        Task { @MainActor in
+            if delayMilliseconds > 0 {
+                try? await Task.sleep(nanoseconds: UInt64(delayMilliseconds) * 1_000_000)
+            }
+            UIApplication.shared.open(callbackURL, options: [:]) { [weak self] success in
+                Task { @MainActor in
+                    if success {
+                        self?.statusText = "Returned to callback URL."
+                    } else {
+                        self?.statusText = "Saved payload, but failed to open callback URL."
+                    }
+                }
+            }
+        }
     }
 }
